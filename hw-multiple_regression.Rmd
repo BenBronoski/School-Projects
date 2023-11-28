@@ -1,0 +1,102 @@
+---
+title: "STAT 449 Homework 7"
+author: "Ben Bronoski"
+date: "Due 11/17/2023"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(car)
+student <- read.csv("student_success.csv")
+source("PredictionEllipse.R")
+```
+
+Your homework must be submitted in R Markdown format. I will not grade homeworks in other formats. Your responses must be supported by both textual explanations and the code you generate to produce your result. (Just examining your various objects in the "Environment" section of RStudio is insufficient -- you must use scripted commands.)
+
+## Homework Questions
+1. The major interest of this study is the prediction of life satisfaction and success seven years after college from the variables that can be measured while a student is in college. These data are available in the file 'student_success.csv'. The variables are:
+    - Age
+    - Gender (0=Male, 1=Female)
+    - Married (0=No, 1=Yes)
+    - IncomeC: Income in College (in thousands)
+    - HealthC: Score on Health Inventory in College
+    - ChildC: Number of Children while in College
+    - LifeSatC: Score on Life Satisfaction Inventory in College
+    - SES: Socio Economic Status of Parents
+    - Smoker (0=No, 1=Yes)
+    - SpiritC: Score on Spirituality Inventory in College
+    - Finish: Finish the program in college (0=No, 1=Yes)
+    - LifeSat7: Score on Life Satisfaction Inventory seven years after College
+    - Income7: Income seven years after College (in thousands)
+    
+    
+    a. Clean the data set. This involves dealing with the missing values and investigating the data for outliers. Describe and justify your choices.
+```{r}
+#install.packages("mice")
+library(mice)
+student.2 <- mice(student, m = 5, method = "pmm")
+student.2 <- complete(student.2)
+summary(student.2)
+mod <- lm(LifeSat7+Income7 ~ ., data = student.2)
+par(mfrow=c(2,2))
+plot(mod)
+```
+
+I decided to impute the missing values using the mice package. Through this package I used the mice() function and specified the method to be pmm (predictive mean matching) because this is the standard imputation method for this function. After verifying that there are no longer any missing values, I looked at a summary of the entire dataset. This did not reveal any major outliers in the dataset. I then made a basic linear model using the specified response varaibles and explanatory variables to attempt to find any outliers that could affect a model significantly. While a couple of the diagnostic plots are somewhat messy, none of them point to any major outliers. Once all of this was done, I decided to keep all of the data points as I was confident there were no outliers in the data even after imputation. 
+    
+    b. Model the life satisfaction variables (LifeSat7 and Income7) against the other (explanatory) variables (potentially including interactions), with a focus on making accurate future predictions. Describe and justify your model selection procedure, and present your final model. 
+```{r}
+#Create three models. One with both life satisfaction variables, and two more for individual models
+mod2 <- lm(cbind(LifeSat7, Income7)~., data = student.2)
+mod3 <- lm(LifeSat7 ~ Subject + Age + Gender + Married + IncomeC + 
+    HealthC + ChildC + LifeSatC + SES + Smoke + Spirit + Finish, data = student.2)
+mod4 <- lm(Income7~Subject + Age + Gender + Married + IncomeC + 
+    HealthC + ChildC + LifeSatC + SES + Smoke + Spirit + Finish, data = student.2)
+
+#Check summary of models to see significance of variables
+summary(mod2)
+summary(mod3)
+summary(mod4)
+
+#Check diagnostic plots for any abnormalities
+par(mfrow=c(2,2))
+plot(mod3)
+par(mfrow=c(2,2))
+plot(mod4)
+
+#Check for normality of residuals
+shapiro.test(mod3$residuals)
+shapiro.test(mod4$residuals)
+```
+
+The first thing I chose to do was start with a model that includes every explanatory variable and both of the response variables. In addition to that I created two individual models of the response variables by themselves. Through this I was able to once again check diagnostic plots for outliers or points that have a lot of leverage in the models. There were not any of these points so I decided to run a shapiro test to verify that the qqplots showed normality of the residuals. Both of the models showed normality of residuals in both qqplots and the shapiro tests so I continued with evaluating significance of individual variables and their effect on the response variables.
+  
+```{r}
+#Use Anova() from car package to see significant variables
+library(car)
+Anova(mod2)
+
+#Update model to see if variables can be removed
+mod2.2 <- update(mod2,.~.-Subject-HealthC-SES-Spirit)
+anova(mod2, mod2.2)
+
+#Linear Hypothesis function to check for the same things
+lh.out <- linearHypothesis(mod2, hypothesis.matrix = c("Subject = 0", "HealthC = 0", "SES = 0", "Spirit = 0"))
+lh.out
+```
+  
+  After checking the variables once again to verify which ones were significant in the multivariate model, I decided to remove the ones that were insignificant. I decided to keep variables that were "almost" significant to see whether or not that would make a difference. After removing the insignificant varaibles, I ran the linearHypothesis() function to verify that all of the variables that I removed had coefficients that were not statistically different from 0. Based on the p-values of all of the multivariate tests, this holds. The final model is LifeSat7 + Income7 ~ Age + Gender + Married + IncomeC + ChildC + LifeSatC + Smoke + Finish. 
+  
+```{r}
+#Test a prediction with random values
+nd <- data.frame(Age = 27, Gender = 0, Married = 1, IncomeC = 8, ChildC = 1, LifeSatC = 27, Smoke = 0, Finish = 1)
+p <- predict(mod2.2, nd)
+p
+predictionEllipse(mod = mod2.2, newdata = nd)
+```
+
+In this example, I made up data for some 27 year old female that finished college, doesn't smoke, is married, has 1 kid and had a small income in college. Based on this, she is still not making a lot of money 7 years after college. She is also not very satisfied with life. It appears that LifeSat7 and Income7 are positively correlated which makes a lot of sense. The more money you make, the more satisfied with life you are likely to be. There are points on this plot that say this female makes $80k and has a satisfaction score over 20. 
