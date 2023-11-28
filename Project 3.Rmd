@@ -1,0 +1,156 @@
+---
+title: "Project 3"
+author: "Ben Bronoski"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(tidyverse)
+library(forecast)
+library(imputeTS)
+library(gridExtra)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+Read in data
+```{r}
+accorddf <- data.frame(read.csv("AccordData.csv"))
+camrydf <- data.frame(read.csv("CamryData.csv"))
+corolladf <- data.frame(read.csv("CorollaData.csv"))
+```
+
+Transpose data into useable format
+```{r}
+accorddf_new <- accorddf %>% pivot_longer(cols = Jan:Dec, names_to = "Month", values_to = "Sales")
+camrydf_new <- camrydf %>% pivot_longer(cols = Jan:Dec, names_to = "Month", values_to = "Sales")
+corolladf_new <- corolladf %>% pivot_longer(cols = Jan:Dec, names_to = "Month", values_to = "Sales")
+```
+
+
+
+
+Create Time Series objects for investigation
+```{r}
+accordtsstl <- ts(gsub(",","", accorddf_new$Sales), start = c(2005,1), end = c(2022,10), frequency = 12)
+camrytsstl <- ts(gsub(",","", camrydf_new$Sales), start = c(2005,1), end = c(2022,10), frequency = 12)
+corollatsstl <- ts(gsub(",","",corolladf_new$Sales), start = c(2005,1), end = c(2022,10), frequency = 12)
+accordts <- ts(as.numeric(gsub(",","", accorddf_new$Sales)), start = c(2005,1), end = c(2022,10), frequency = 12)
+camryts <- ts(as.numeric(gsub(",","", camrydf_new$Sales), start = c(2005,1), end = c(2022,10), frequency = 12))
+corollats <- ts(as.numeric(gsub(",","",corolladf_new$Sales), start = c(2005,1), end = c(2022,10), frequency = 12))
+plot(accordtsstl, xlab = "Year", ylab = "Accord Sales")
+plot(corollatsstl, xlab = "Year", ylab = "Corolla Sales")
+plot(camrytsstl, xlab = "Year", ylab = "Camry Sales")
+```
+
+Create training and testing sets from the time series for each type of analysis
+
+```{r}
+accordtraining <- subset(accordts, end = length(accordts)-6)
+accordtest <- subset(accordts, start = length(accordts)-5)
+camrytraining <- subset(camryts, end = length(camryts)-6)
+camrytest <- subset(camryts, start = length(camryts)-5)
+corollatraining <- subset(corollats, end = length(corollats)-6)
+corollatest <- subset(corollats, start = length(corollats)-5)
+accordtraining2 <- subset(accordts, end = length(accordts)-12)
+accordtest2 <- subset(accordts, start = length(accordts)-11)
+camrytraining2 <- subset(camryts, end = length(camryts)-12)
+camrytest2 <- subset(camryts, start = length(camryts)-11)
+corollatraining2 <- subset(corollats, end = length(corollats)-12)
+corollatest2 <- subset(corollats, start = length(corollats)-11)
+
+accordtrainingstl <- subset(accordtsstl, end = length(accordts)-6)
+accordteststl <- subset(accordtsstl, start = length(accordts)-5)
+camrytrainingstl <- subset(camrytsstl, end = length(camryts)-6)
+camryteststl <- subset(camrytsstl, start = length(camryts)-5)
+corollatrainingstl <- subset(corollatsstl, end = length(corollats)-6)
+corollateststl <- subset(corollatsstl, start = length(corollats)-5)
+accordtraining2stl <- subset(accordtsstl, end = length(accordts)-12)
+accordtest2stl <- subset(accordtsstl, start = length(accordts)-11)
+camrytraining2stl <- subset(camrytsstl, end = length(camryts)-12)
+camrytest2stl <- subset(camrytsstl, start = length(camryts)-11)
+corollatraining2stl <- subset(corollatsstl, end = length(corollats)-12)
+corollatest2stl <- subset(corollatsstl, start = length(corollats)-11)
+```
+
+Test stl method for each car
+```{r}
+accordstl <- stl(accordtrainingstl, s.window = "periodic")
+camrystl <- stl(camrytrainingstl, s.window = "periodic")
+corollastl <- stl(corollatrainingstl, s.window = "periodic")
+
+accordstl2 <- stl(accordtraining2stl, s.window = "periodic")
+camrystl2 <- stl(camrytraining2stl, s.window = "periodic")
+corollastl2 <- stl(corollatraining2stl, s.window = "periodic")
+
+plot(forecast(stl(accordtrainingstl, s.window = "periodic"), h=6), xlab = "Year" , ylab = "Accord Sales")
+plot(forecast(stl(camrytrainingstl, s.window = "periodic"), h=6), xlab = "Year", ylab ="Camry Sales")
+plot(forecast(stl(corollatrainingstl, s.window = "periodic"), h=6), xlab = "Year", ylab ="Corolla Sales")
+plot(accordstl, title(main = "Accord Sales"))
+plot(camrystl, title(main = "Camry Sales"))
+plot(corollastl, title(main = "Corolla Sales"))
+p1=accordstl %>% forecast(h=6)%>%autoplot()+autolayer(accordteststl) + xlab("Year") + ylab("Accord Sales") + title(main = "Accord Forecast")
+p2=camrystl %>% forecast(h=6)%>%autoplot()+autolayer(camryteststl) + xlab("Year") + ylab("Camry Sales") + title(main = "Camry Forecast")
+p3=corollastl%>%forecast(h=6)%>%autoplot()+autolayer(corollateststl) + xlab("Year") + ylab("Corolla Sales") + title(main = "Corolla Forecast")
+grid.arrange(p1,p2,p3)
+
+p1a=accordstl2 %>% forecast(h=12)%>%autoplot()+autolayer(accordtest2stl) + xlab("Year") + ylab("Accord Sales")
+p2a=camrystl2 %>% forecast(h=12)%>%autoplot()+autolayer(camrytest2stl) + xlab("Year") + ylab("Camry Sales")
+p3a=corollastl2%>%forecast(h=12)%>%autoplot()+autolayer(corollatest2stl) + xlab("Year") + ylab("Corolla Sales")
+grid.arrange(p1a, p2a, p3a)
+
+p4=accordstl %>% forecast(h=12)%>%autoplot() + xlab("Year") + ylab("Accord Sales")
+p5=camrystl %>% forecast(h=12)%>%autoplot() + xlab("Year") + ylab("Camry Sales")
+p6=corollastl%>%forecast(h=12)%>%autoplot() + xlab("Year") + ylab("Corolla Sales")
+grid.arrange(p4,p5,p6)
+
+p7=accordstl %>% forecast(h=120)%>%autoplot() + xlab("Year") + ylab("Accord Sales")
+p8=camrystl %>% forecast(h=120)%>%autoplot() + xlab("Year") + ylab("Camry Sales")
+p9=corollastl%>%forecast(h=120)%>%autoplot() + xlab("Year") + ylab("Corolla Sales")
+grid.arrange(p7,p8,p9)
+```
+
+Test arima method for each car
+```{r}
+accord.arima <- auto.arima(accordtraining)
+camry.arima <- auto.arima(camrytraining)
+corolla.arima <- auto.arima(corollatraining)
+
+accord.arima2 <- auto.arima(accordtraining2)
+camry.arima2 <- auto.arima(camrytraining2)
+corolla.arima2 <- auto.arima(corollatraining2)
+
+plot(forecast(accord.arima))
+plot(forecast(camry.arima))
+plot(forecast(corolla.arima))
+
+p10=accord.arima %>% forecast(h=6)%>%autoplot()+autolayer(accordtest)
+p11=camry.arima %>% forecast(h=6)%>%autoplot()+autolayer(camrytest)
+p12=corolla.arima%>%forecast(h=6)%>%autoplot()+autolayer(corollatest)
+
+p10a=accord.arima2 %>% forecast(h=12)%>%autoplot()+autolayer(accordtest2)
+p11a=camry.arima2 %>% forecast(h=12)%>%autoplot()+autolayer(camrytest2)
+p12a=corolla.arima2%>%forecast(h=12)%>%autoplot()+autolayer(corollatest2)
+
+plot(p10)
+plot(p10a)
+
+p13=accord.arima %>% forecast(h=12)%>%autoplot()
+p13a=accord.arima %>% forecast(h=120)%>%autoplot()
+
+plot(p13)
+plot(p13a)
+```
