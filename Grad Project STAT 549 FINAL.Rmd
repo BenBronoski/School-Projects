@@ -1,0 +1,343 @@
+---
+title: "Grad Project STAT 549 FINAL"
+author: "Ben Bronoski"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(MASS)
+library(smacof)
+library(tibble)
+library(patchwork)
+```
+
+```{r}
+votes_1 = read.csv("HS118_votes.csv")
+votes_2 = read.csv("HS117_votes.csv")
+
+votes_data = rbind(votes_1, votes_2)
+
+members_1 = read.csv("HS118_members.csv")
+members_2 = read.csv("HS117_members.csv")
+
+members_data <- rbind(members_1, members_2)
+
+all.data <- left_join(votes_data, members_data)
+
+#Put party name in data frame based on party code column
+all.data <- all.data %>% mutate(party = ifelse(party_code == 100, "Democratic", ifelse(party_code == 200, "Republican", "Other")))
+
+#Transform cast code to reflect yes, no, and other more appropriately
+all.data <- all.data %>% 
+  mutate(cast_code = ifelse(cast_code == 0 | cast_code >= 7, NA, 
+                            ifelse(cast_code > 0 & cast_code < 4, 1, 
+                                   ifelse(cast_code > 3 & cast_code < 7, 2, NA))))
+
+#Create data frames for individual congress sessions
+congress.118 <- all.data %>% filter(congress == 118)
+congress.117 <- all.data %>% filter(congress == 117)
+```
+
+```{r}
+#Plot showing the separation of beliefs of Democrats and Republicans
+all.data.plot <- all.data %>% filter(chamber == "Senate")
+all.data.plot$chamber <- factor(all.data.plot$chamber, levels = c("Democratic", "Republican", "Other"))
+ggplot(all.data.plot, aes(nominate_dim1, nominate_dim2, color = party)) + 
+  geom_point() + 
+  labs(color = "Party", x = "Economic Liberalism-Conservationism Scale", y = "", title = "Senators by Ideological Beliefs") + 
+  scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60")
+```
+
+```{r}
+#Senate for congress session 118
+
+#filter to only senate members
+congress.118.sen <- congress.118 %>% filter(chamber == "Senate")
+
+#create a matrix of 0's that will hold the final values
+my.mat.sen.118 <- matrix(0, nrow = length(unique(congress.118.sen$icpsr)), ncol = length(unique(congress.118.sen$icpsr)))
+
+#index the matrix using the icpsr codes
+rownames(my.mat.sen.118) <- colnames(my.mat.sen.118) <- unique(congress.118.sen$icpsr)
+
+#Find all combinations of 2 icpsr codes for 1 session of congress
+b <- unique(congress.118.sen$icpsr)
+a <- combn(b, 2)
+
+#Create loop that filters to each pair of icpsr's
+for (i in 1:ncol(a)){
+  
+  icpsr.pair <- a[,i]
+  
+  dist <- numeric(length(unique(congress.118.sen$rollnumber)))
+  #loop over each of the votes using the combination of icpsr's specified in the outside loop
+  for (n in 1:length(unique(congress.118.sen$rollnumber))) {
+
+#filter the data to those two icpsr codes
+#Find their distance for each individual vote
+#create a dist vector that will hold the difference values
+loop.data <- congress.118.sen %>% filter(icpsr %in% icpsr.pair, rollnumber == n)
+  
+if (nrow(loop.data)<2){
+  
+    dist[n] <- NA
+    
+  } else { 
+  #fill vector with 0's and 1's
+  dist[n] <- as.numeric(loop.data$cast_code[loop.data$icpsr == icpsr.pair[1]] != loop.data$cast_code[loop.data$icpsr == icpsr.pair[2]])
+  }
+  
+  #replace any NA's with a 1
+  dist[is.na(dist)] <- 1
+  
+ #Sum those vectors and place in the empty matrix based on the row/column they belong in via icpsr 
+my.mat.sen.118[as.character(icpsr.pair[1]), as.character(icpsr.pair[2])] <- sum(dist)
+my.mat.sen.118[as.character(icpsr.pair[2]), as.character(icpsr.pair[1])] <- sum(dist)
+  }
+}
+
+congress.118.sen$party_color <- ifelse(congress.118.sen$party == "Republican", "red", ifelse(congress.118.sen$party == "Democratic", "blue", "green"))
+
+congress.118.mds <- cmdscale(my.mat.sen.118, eig = T)
+sen.118.df <- data.frame(congress.118.mds$points)
+sen.118.df <- rownames_to_column(sen.118.df, "icpsr")
+sen.118.df <- sen.118.df %>% rename(X.Coord = X1, Y.Coord = X2)
+sen.118.df$icpsr <- as.numeric(sen.118.df$icpsr)
+congress.118.sen <- left_join(congress.118.sen, sen.118.df)
+```
+
+```{r}
+#Senate for congress session 117
+
+#filter to only senate members
+congress.117.sen <- congress.117 %>% filter(chamber == "Senate")
+
+#create a matrix of 0's that will hold the final values
+my.mat.sen.117 <- matrix(0, nrow = length(unique(congress.117.sen$icpsr)), ncol = length(unique(congress.117.sen$icpsr)))
+
+#index the matrix using the icpsr codes
+rownames(my.mat.sen.117) <- colnames(my.mat.sen.117) <- unique(congress.117.sen$icpsr)
+
+#Find all combinations of 2 icpsr codes for 1 session of congress
+b <- unique(congress.117.sen$icpsr)
+a <- combn(b, 2)
+
+#Create loop that filters to each pair of icpsr's
+for (i in 1:ncol(a)){
+  
+  icpsr.pair <- a[,i]
+  
+  dist <- numeric(length(unique(congress.117.sen$rollnumber)))
+  #loop over each of the votes using the combination of icpsr's specified in the outside loop
+  for (n in 1:length(unique(congress.117.sen$rollnumber))) {
+
+#filter the data to those two icpsr codes
+#Find their distance for each individual vote
+#create a dist vector that will hold the difference values
+loop.data <- congress.117.sen %>% filter(icpsr %in% icpsr.pair, rollnumber == n)
+  if (nrow(loop.data)<2){
+    dist[n] <- NA
+  } else { 
+  #fill vector with 0's and 1's
+  dist[n] <- as.numeric(loop.data$cast_code[loop.data$icpsr == icpsr.pair[1]] != loop.data$cast_code[loop.data$icpsr == icpsr.pair[2]])
+  }
+  #replace any NA's with a 1
+  dist[is.na(dist)] <- 1
+  
+ #Sum those vectors and place in the empty matrix based on the row/column they belong in via icpsr 
+my.mat.sen.117[as.character(icpsr.pair[1]), as.character(icpsr.pair[2])] <- sum(dist)
+my.mat.sen.117[as.character(icpsr.pair[2]), as.character(icpsr.pair[1])] <- sum(dist)
+  }
+}
+
+congress.117.mds <- cmdscale(my.mat.sen.117, eig = T)
+sen.117.df <- data.frame(congress.117.mds$points)
+sen.117.df <- rownames_to_column(sen.117.df, "icpsr")
+sen.117.df <- sen.117.df %>% rename(X.Coord = X1, Y.Coord = X2)
+sen.117.df$icpsr <- as.numeric(sen.117.df$icpsr)
+congress.117.sen <- left_join(congress.117.sen, sen.117.df)
+```
+
+```{r}
+#House for congress session 117
+
+#filter to only House members
+congress.117.house <- congress.117 %>% filter(chamber == "House")
+congress.117.house.loop <- congress.117.house[,3:5] 
+
+#create a matrix of 0's that will hold the final values
+my.mat.house.117 <- matrix(0, nrow = length(unique(congress.117.house$icpsr)), ncol = length(unique(congress.117.house$icpsr)))
+
+#index the matrix using the icpsr codes
+rownames(my.mat.house.117) <- colnames(my.mat.house.117) <- unique(congress.117.house$icpsr)
+
+#Find all combinations of 2 icpsr codes for 1 session of congress
+b <- unique(congress.117.house$icpsr)
+a <- combn(b, 2)
+
+#Create loop that filters to each pair of icpsr's
+for (i in 1:ncol(a)){
+  
+  icpsr.pair <- a[,i]
+  
+  dist <- numeric(length(unique(congress.117.house$rollnumber)))
+  #loop over each of the votes using the combination of icpsr's specified in the outside loop
+  for (n in 1:length(unique(congress.117.house$rollnumber))) {
+
+#filter the data to those two icpsr codes
+#Find their distance for each individual vote
+#create a dist vector that will hold the difference values
+loop.data <- congress.117.house.loop %>% filter(icpsr %in% icpsr.pair, rollnumber == n)
+  if (nrow(loop.data)<2){
+    dist[n] <- NA
+  } else { 
+  #fill vector with 0's and 1's
+  dist[n] <- as.numeric(loop.data$cast_code[loop.data$icpsr == icpsr.pair[1]] != loop.data$cast_code[loop.data$icpsr == icpsr.pair[2]])
+  }
+  #replace any NA's with a 1
+  dist[is.na(dist)] <- 1
+  
+ #Sum those vectors and place in the empty matrix based on the row/column they belong in via icpsr 
+my.mat.house.117[as.character(icpsr.pair[1]), as.character(icpsr.pair[2])] <- sum(dist)
+my.mat.house.117[as.character(icpsr.pair[2]), as.character(icpsr.pair[1])] <- sum(dist)
+  }
+}
+
+congress.117.house.mds <- cmdscale(my.mat.house.117, eig = T)
+house.117.df <- data.frame(congress.117.house.mds$points)
+house.117.df <- rownames_to_column(house.117.df, "icpsr")
+house.117.df <- house.117.df %>% rename(X.Coord = X1, Y.Coord = X2)
+house.117.df$icpsr <- as.numeric(house.117.df$icpsr)
+congress.117.house <- left_join(congress.117.house, house.117.df)
+ggplot(data = congress.117.house,aes(X.Coord, Y.Coord, color = as.factor(party))) +
+  geom_point() + scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) + 
+  labs(title = "MDS of House in Session 117", x = "", y = "", color = "Party") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+
+```
+
+```{r}
+#House for congress session 118
+
+#filter to only senate members
+congress.118.house <- congress.118 %>% filter(chamber == "House")
+congress.118.house.loop <- congress.118.house[,3:5]
+
+#create a matrix of 0's that will hold the final values
+my.mat.house.118 <- matrix(0, nrow = length(unique(congress.118.house$icpsr)), ncol = length(unique(congress.118.house$icpsr)))
+
+#index the matrix using the icpsr codes
+rownames(my.mat.house.118) <- colnames(my.mat.house.118) <- unique(congress.118.house$icpsr)
+
+#Find all combinations of 2 icpsr codes for 1 session of congress
+b <- unique(congress.118.house$icpsr)
+a <- combn(b, 2)
+
+#Create loop that filters to each pair of icpsr's
+for (i in 1:ncol(a)){
+  
+  icpsr.pair <- a[,i]
+  
+  dist <- numeric(length(unique(congress.118.house$rollnumber)))
+  #loop over each of the votes using the combination of icpsr's specified in the outside loop
+  for (n in 1:length(unique(congress.118.house$rollnumber))) {
+
+#filter the data to those two icpsr codes
+#Find their distance for each individual vote
+#create a dist vector that will hold the difference values
+loop.data <- congress.118.house.loop %>% filter(icpsr %in% icpsr.pair, rollnumber == n)
+  if (nrow(loop.data)<2){
+    
+    #Catch any members that were not a part of a vote that the other was
+    dist[n] <- NA
+    
+  } else { 
+  #fill vector with 0's and 1's
+  dist[n] <- as.numeric(loop.data$cast_code[loop.data$icpsr == icpsr.pair[1]] != loop.data$cast_code[loop.data$icpsr == icpsr.pair[2]])
+  }
+  #replace any NA's with a 1
+  dist[is.na(dist)] <- 1
+  
+ #Sum those vectors and place in the empty matrix based on the row/column they belong in via icpsr 
+my.mat.house.118[as.character(icpsr.pair[1]), as.character(icpsr.pair[2])] <- sum(dist)
+my.mat.house.118[as.character(icpsr.pair[2]), as.character(icpsr.pair[1])] <- sum(dist)
+  }
+}
+
+congress.118.house.mds <- cmdscale(my.mat.house.118, eig = T)
+house.118.df <- data.frame(congress.118.house.mds$points)
+house.118.df <- rownames_to_column(house.118.df, "icpsr")
+house.118.df <- house.118.df %>% rename(X.Coord = X1, Y.Coord = X2)
+house.118.df$icpsr <- as.numeric(house.118.df$icpsr)
+congress.118.house <- left_join(congress.118.house, house.118.df)
+ggplot(data = congress.118.house,aes(X.Coord, Y.Coord, color = as.factor(party))) +
+  geom_point() + scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) + 
+  labs(title = "MDS of House in Session 118", x = "", y = "", color = "Party") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+```
+
+```{r}
+#Write data to csv's
+write.csv(congress.117.sen, "C:/Users/benbr/OneDrive/Desktop/UWL GRAD/STAT 796 - Applied Multivariate Statistics/Congress 117 Senate.csv")
+write.csv(congress.118.sen, "C:/Users/benbr/OneDrive/Desktop/UWL GRAD/STAT 796 - Applied Multivariate Statistics/Congress 118 Senate.csv")
+write.csv(congress.117.house, "C:/Users/benbr/OneDrive/Desktop/UWL GRAD/STAT 796 - Applied Multivariate Statistics/Congress 117 House.csv")
+write.csv(congress.118.house, "C:/Users/benbr/OneDrive/Desktop/UWL GRAD/STAT 796 - Applied Multivariate Statistics/Congress 118 House.csv")
+
+congress.118.sen <- read.csv("Congress 118 Senate.csv")
+congress.117.sen <- read.csv("Congress 117 Senate.csv")
+test.118 <- congress.118.sen %>% filter(rollnumber == 1)
+table(test.118$party)
+test.117 <- congress.117.sen %>% filter(rollnumber == 1)
+table(test.117$party)
+```
+
+```{r}
+p1 <- ggplot(data = congress.117.sen,aes(X.Coord, Y.Coord, color = as.factor(party))) +
+  #Removing legend from this plot to allow for better visibility in final plot
+  #since the legends for both plots are identical
+  geom_point(show.legend = FALSE) + 
+  scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) + 
+  labs(title = "MDS of Senate in Session 117", x = "", y = "", color = "Party") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+p2 <- ggplot(data = congress.118.sen,aes(X.Coord, Y.Coord, color = as.factor(party))) +
+  geom_point() + scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) + 
+  labs(title = "MDS of Senate in Session 118", x = "", y = "", color = "Party") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+
+p1 + p2
+```
+
+```{r}
+#Filter out members that don't have votes for a significant portion of the session
+congress.117.sen.filtered <- congress.117.sen %>% filter(Y.Coord < 200)
+ggplot(data = congress.117.sen.filtered,aes(X.Coord, Y.Coord, color = as.factor(party))) + 
+geom_point() + 
+  scale_color_manual(breaks = c("Democratic", "Republican", "Other"), values = c("blue", "red", "green")) + 
+  labs(title = "MDS of Senate in Congress Session 117", x = "", y = "", color = "Party") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+```
+
